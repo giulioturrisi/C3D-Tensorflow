@@ -68,12 +68,15 @@ def get_frames(video_path, frames_per_step, segment, im_size, sess = None):
     #TOP
     return frames
 
-def read_clip_label(Batch_size,frames_per_step,entry_to_path, label_to_id, json_dict, im_size,sess):
+def read_clip_label(batch_size,frames_per_step, im_size,sess):
 
-    batch = np.zeros(shape=(Batch_size,frames_per_step,im_size,im_size,3),dtype=float)
-    labels =  np.zeros(shape=(Batch_size),dtype=int)
+    entry_to_path, video2code, label_to_id =  makeDict()
+    json_dict = json.load(open('Dataset_PatternRecognition/json/dataset_training.json'))
 
-    for s in range(Batch_size):
+    batch = np.zeros(shape=(batch_size,frames_per_step,im_size,im_size,3),dtype=float)
+    labels =  np.zeros(shape=(batch_size),dtype=int)
+
+    for s in range(batch_size):
         entry_name = random.choice(list(json_dict.keys()))
         print(entry_name)
         training_entry = random.choice(json_dict[entry_name])
@@ -124,8 +127,8 @@ def makeDict(path=project_path):
     return path_dict, video2code, label2code
 
 
-path_dict, video2code, label2code =  makeDict()
+#path_dict, video2code, label2code =  makeDict()
 
-with tf.Session() as sess:
+#with tf.Session() as sess:
 
-    batch,labels = read_clip_label(1,16,path_dict, label2code, json.load(open('Dataset_PatternRecognition/json/dataset_training.json')), 368,sess)
+#batch,labels = read_clip_label(10,16,path_dict, label2code, json.load(open('Dataset_PatternRecognition/json/dataset_training.json')), 368,sess)

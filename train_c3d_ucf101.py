@@ -20,12 +20,12 @@ import time
 import numpy
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
-import input_data
+#import input_data
 import c3d_model
 import math
 import numpy as np
 #######################added
-import dataset_manager as input_dat
+import dataset_manager as input_data
 
 # Basic model parameters as external flags.
 flags = tf.app.flags
@@ -119,7 +119,7 @@ def run_training():
   model_filename = "./sports1m_finetuning_ucf101.model"
 
   #with tf.Graph().as_default():
-  with tf.scope('Domenico'):
+  with tf.name_scope('Domenico'):
     global_step = tf.get_variable(
                     'global_step',
                     [],
@@ -165,7 +165,7 @@ def run_training():
       with tf.device('/gpu:%d' % gpu_index):
         
         varlist2 = [ weights['out'],biases['out'] ]
-        varlist1 = list( set(weights.values() + biases.values()) - set(varlist2) )
+        varlist1 = list( set(list(weights.values()) + list(biases.values())) - set(varlist2) )
         logit = c3d_model.inference_c3d(
                         images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size,:,:,:,:],
                         0.5,
@@ -197,7 +197,7 @@ def run_training():
     null_op = tf.no_op()
 
     # Create a saver for writing training checkpoints.
-    saver = tf.train.Saver(weights.values() + biases.values())
+    saver = tf.train.Saver(list(weights.values()) + list(biases.values()))
     init = tf.global_variables_initializer()
 
     # Create a session for running Ops on the Graph.
@@ -221,9 +221,9 @@ def run_training():
       #                crop_size=c3d_model.CROP_SIZE,
       #                shuffle=True
       #                )
-      train_images, train_labels = input_data.read_clip_and_label(
+      train_images, train_labels = input_data.read_clip_label(
                       batch_size=FLAGS.batch_size * gpu_num,
-                      num_frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
+                      frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
                       im_size=c3d_model.CROP_SIZE,
                       sess = sess
                       )
@@ -254,7 +254,7 @@ def run_training():
         #                crop_size=c3d_model.CROP_SIZE,
         #                shuffle=True
         #                )
-        val_images, val_labels= input_data.read_clip_and_label(
+        val_images, val_labels= input_data.read_clip_label(
                         batch_size=FLAGS.batch_size * gpu_num,
                         frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
                         im_size=c3d_model.CROP_SIZE,
