@@ -118,7 +118,8 @@ def run_training():
   use_pretrained_model = True 
   model_filename = "./sports1m_finetuning_ucf101.model"
 
-  with tf.Graph().as_default():
+  #with tf.Graph().as_default():
+  with tf.scope('Domenico'):
     global_step = tf.get_variable(
                     'global_step',
                     [],
@@ -220,7 +221,7 @@ def run_training():
       #                crop_size=c3d_model.CROP_SIZE,
       #                shuffle=True
       #                )
-      train_images, train_labels, _, _, _ = input_data.read_clip_and_label(
+      train_images, train_labels = input_data.read_clip_and_label(
                       batch_size=FLAGS.batch_size * gpu_num,
                       num_frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
                       im_size=c3d_model.CROP_SIZE,
@@ -253,7 +254,7 @@ def run_training():
         #                crop_size=c3d_model.CROP_SIZE,
         #                shuffle=True
         #                )
-        val_images, val_labels, _, _, _ = input_data.read_clip_and_label(
+        val_images, val_labels= input_data.read_clip_and_label(
                         batch_size=FLAGS.batch_size * gpu_num,
                         frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
                         im_size=c3d_model.CROP_SIZE,
