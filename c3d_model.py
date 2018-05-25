@@ -23,7 +23,7 @@ forward to make predictions.
 import tensorflow as tf
 
 # The UCF-101 dataset has 101 classes
-NUM_CLASSES = 101
+NUM_CLASSES = 52
 
 # Images are cropped to (CROP_SIZE, CROP_SIZE)
 CROP_SIZE = 112
@@ -33,6 +33,21 @@ CHANNELS = 3
 NUM_FRAMES_PER_CLIP = 16
 
 "-----------------------------------------------------------------------------------------------------------------------"
+class SigmoidLayer():
+
+    def __init__(self, preout_shape):
+
+        self.shape = preout_shape
+
+        self.W = tf.Variable(initializer=tf.truncated_normal(shape=[self.shape,1]))
+
+        self.b = tf.Variable(initializer=tf.zeros(shape=[1]))
+
+    def __call__(self, preout):
+
+          out = tf.matmul(preout, self.W) + self.b
+
+          return out
 
 def conv3d(name, l_input, w, b):
   return tf.nn.bias_add(
@@ -87,7 +102,4 @@ def inference_c3d(_X, _dropout, batch_size, _weights, _biases):
   dense2 = tf.nn.relu(tf.matmul(dense1, _weights['wd2']) + _biases['bd2'], name='fc2') # Relu activation
   dense2 = tf.nn.dropout(dense2, _dropout)
 
-  # Output: class prediction
-  out = tf.matmul(dense2, _weights['out']) + _biases['out']
-
-  return out
+  return dense2

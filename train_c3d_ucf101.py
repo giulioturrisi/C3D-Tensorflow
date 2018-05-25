@@ -22,6 +22,8 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 #import input_data
 import c3d_model
+from c3d_model import SigmoidLayer
+
 import math
 import numpy as np
 #######################added
@@ -29,7 +31,7 @@ import dataset_manager as input_data
 
 # Basic model parameters as external flags.
 flags = tf.app.flags
-gpu_num = 2
+gpu_num = 1
 #flags.DEFINE_float('learning_rate', 0.0, 'Initial learning rate.')
 flags.DEFINE_integer('max_steps', 5000, 'Number of steps to run trainer.')
 flags.DEFINE_integer('batch_size', 10, 'Batch size.')
@@ -76,8 +78,17 @@ def average_gradients(tower_grads):
   return average_grads
 
 def tower_loss(name_scope, logit, labels):
+
+  outputs = tf.concat(logit, axis=-1)
+
+  labels_sigs = tf.one_hot(indices=labels, depth=c3d_model.NUM_CLASSES, axis=-1)
+
+  outputs_ = tf.reshape(outputs, shape=[-1])
+  
+  labels_ = tf.reshape(labels_sigs, shape=[-1])
+  
   cross_entropy_mean = tf.reduce_mean(
-                  tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels,logits=logit)
+                  tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.cast(labels_,dtype=tf.float32),logits=outputs_)
                   )
   tf.summary.scalar(
                   name_scope + '_cross_entropy',
@@ -87,12 +98,18 @@ def tower_loss(name_scope, logit, labels):
   tf.summary.scalar(name_scope + '_weight_decay_loss', tf.reduce_mean(weight_decay_loss) )
 
   # Calculate the total loss for the current tower.
-  total_loss = cross_entropy_mean + weight_decay_loss 
+  total_loss = cross_entropy_mean + weight_decay_loss
   tf.summary.scalar(name_scope + '_total_loss', tf.reduce_mean(total_loss) )
   return total_loss
 
 def tower_acc(logit, labels):
-  correct_pred = tf.equal(tf.argmax(logit, 1), labels)
+
+  out = tf.sigmoid(logit)
+
+  out /= tf.reduce_sum(out, axis=1, keepdims=True)
+
+  correct_pred = tf.equal(tf.argmax(out, 1), labels)
+
   accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
   return accuracy
 
@@ -115,7 +132,7 @@ def run_training():
   # Create model directory
   if not os.path.exists(model_save_dir):
       os.makedirs(model_save_dir)
-  use_pretrained_model = True 
+  use_pretrained_model = True
   model_filename = "./sports1m_finetuning_ucf101.model"
 
   #with tf.Graph().as_default():
@@ -146,7 +163,7 @@ def run_training():
               'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 3, 512, 512], 0.0005),
               'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.0005),
               'wd2': _variable_with_weight_decay('wd2', [4096, 4096], 0.0005),
-              'out': _variable_with_weight_decay('wout', [4096, c3d_model.NUM_CLASSES], 0.0005)
+              #'out': _variable_with_weight_decay('wout', [4096, c3d_model.NUM_CLASSES], 0.0005)
               }
       biases = {
               'bc1': _variable_with_weight_decay('bc1', [64], 0.000),
@@ -159,32 +176,45 @@ def run_training():
               'bc5b': _variable_with_weight_decay('bc5b', [512], 0.000),
               'bd1': _variable_with_weight_decay('bd1', [4096], 0.000),
               'bd2': _variable_with_weight_decay('bd2', [4096], 0.000),
-              'out': _variable_with_weight_decay('bout', [c3d_model.NUM_CLASSES], 0.000),
+              #'out': _variable_with_weight_decay('bout', [c3d_model.NUM_CLASSES], 0.000),
               }
     for gpu_index in range(0, gpu_num):
       with tf.device('/gpu:%d' % gpu_index):
-        
-        varlist2 = [ weights['out'],biases['out'] ]
-        varlist1 = list( set(list(weights.values()) + list(biases.values())) - set(varlist2) )
-        logit = c3d_model.inference_c3d(
+
+          preout = c3d_model.inference_c3d(
                         images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size,:,:,:,:],
                         0.5,
                         FLAGS.batch_size,
                         weights,
                         biases
                         )
-        loss_name_scope = ('gpud_%d_loss' % gpu_index)
-        loss = tower_loss(
-                        loss_name_scope,
-                        logit,
-                        labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size]
-                        )
-        grads1 = opt_stable.compute_gradients(loss, varlist1)
-        grads2 = opt_finetuning.compute_gradients(loss, varlist2)
-        tower_grads1.append(grads1)
-        tower_grads2.append(grads2)
-        logits.append(logit)
-    logits = tf.concat(logits,0)
+
+          out_layers = []
+
+
+          varlist2 = []
+
+          for layer in range(c3d_model.NUM_CLASSES):
+
+              sig_layer = SigmoidLayer(4096)
+
+              out_layers.append(sig_layer(preout))
+
+              varlist2.extend([sig_layer.W, sig_layer.b])
+
+          varlist1 = list(set(list(weights.values()) + list(biases.values())))
+
+          loss_name_scope = ('gpud_%d_loss' % gpu_index)
+          loss = tower_loss(
+                          loss_name_scope,
+                          out_layers,
+                          labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size]
+                          )
+          grads1 = opt_stable.compute_gradients(loss, varlist1)
+          grads2 = opt_finetuning.compute_gradients(loss, varlist2)
+          tower_grads1.append(grads1)
+          tower_grads2.append(grads2)
+    logits = tf.concat(out_layers,axis=-1)
     accuracy = tower_acc(logits, labels_placeholder)
     tf.summary.scalar('accuracy', accuracy)
     grads1 = average_gradients(tower_grads1)
@@ -227,7 +257,7 @@ def run_training():
                       im_size=c3d_model.CROP_SIZE,
                       sess = sess
                       )
-     
+
       sess.run(train_op, feed_dict={
                       images_placeholder: train_images,
                       labels_placeholder: train_labels
@@ -239,12 +269,12 @@ def run_training():
       if (step) % 10 == 0 or (step + 1) == FLAGS.max_steps:
         saver.save(sess, os.path.join(model_save_dir, 'c3d_ucf_model'), global_step=step)
         print('Training Data Eval:')
-        summary, acc = sess.run(
-                        [merged, accuracy],
+        summary, acc, train_loss = sess.run(
+                        [merged, accuracy, loss],
                         feed_dict={images_placeholder: train_images,
                             labels_placeholder: train_labels
                             })
-        print ("accuracy: " + "{:.5f}".format(acc))
+        print ("accuracy: {:.5f} -- loss : {:.5f}".format(acc, train_loss))
         train_writer.add_summary(summary, step)
         print('Validation Data Eval:')
         #val_images, val_labels, _, _, _ = input_data.read_clip_and_label(
@@ -260,7 +290,7 @@ def run_training():
                         im_size=c3d_model.CROP_SIZE,
                         sess=sess
                         )
-       
+
         summary, acc = sess.run(
                         [merged, accuracy],
                         feed_dict={
