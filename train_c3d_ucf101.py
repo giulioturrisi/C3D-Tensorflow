@@ -98,8 +98,8 @@ def tower_loss(name_scope, logit, labels):
   tf.summary.scalar(name_scope + '_weight_decay_loss', tf.reduce_mean(weight_decay_loss) )
 
   # Calculate the total loss for the current tower.
-  total_loss = cross_entropy_mean + weight_decay_loss
-  tf.summary.scalar(name_scope + '_total_loss', tf.reduce_mean(total_loss) )
+  total_loss = tf.reduce_mean(cross_entropy_mean + weight_decay_loss)
+  tf.summary.scalar(name_scope + '_total_loss', total_loss )
   return total_loss
 
 def tower_acc(logit, labels):
@@ -107,6 +107,8 @@ def tower_acc(logit, labels):
   out = tf.sigmoid(logit)
 
   out /= tf.reduce_sum(out, axis=1, keepdims=True)
+
+  print(out)
 
   correct_pred = tf.equal(tf.argmax(out, 1), labels)
 
@@ -274,7 +276,7 @@ def run_training():
                         feed_dict={images_placeholder: train_images,
                             labels_placeholder: train_labels
                             })
-        print ("accuracy: {:.5f} -- loss : {:.5f}".format(acc, train_loss))
+        print ("accuracy: {} -- loss : {}".format(acc, train_loss))
         train_writer.add_summary(summary, step)
         print('Validation Data Eval:')
         #val_images, val_labels, _, _, _ = input_data.read_clip_and_label(
